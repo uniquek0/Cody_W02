@@ -1,6 +1,7 @@
 """Python 기초 퀴즈 게임. 실행: python quiz_game.py"""
 
 import json
+import shutil
 from pathlib import Path
 
 try:
@@ -73,49 +74,98 @@ class QuizGame:
             "best_total": self.best_total,
         }
         temporary = self.state_file.with_name(self.state_file.name + ".tmp")
+        backup_file = self.state_file.with_name(self.state_file.name + ".bak")
+        backup_temporary = backup_file.with_name(backup_file.name + ".tmp")
         try:
             with temporary.open("w", encoding="utf-8") as file:
                 json.dump(data, file, ensure_ascii=False, indent=2)
                 file.write("\n")
+
+            backup_is_valid = self._is_valid_state_file(backup_file)
+            if self._is_valid_state_file(self.state_file):
+                try:
+                    shutil.copyfile(self.state_file, backup_temporary)
+                    backup_temporary.replace(backup_file)
+                    backup_is_valid = True
+                except OSError as error:
+                    print(f"[백업 오류] .bak 파일을 갱신하지 못했습니다: {error}")
+
             temporary.replace(self.state_file)
+
+            if not backup_is_valid:
+                try:
+                    shutil.copyfile(self.state_file, backup_temporary)
+                    backup_temporary.replace(backup_file)
+                except OSError as error:
+                    print(f"[백업 오류] .bak 파일을 생성하지 못했습니다: {error}")
             return True
         except OSError as error:
             print(f"[저장 오류] 파일을 저장하지 못했습니다: {error}")
-            try:
-                temporary.unlink(missing_ok=True)
-            except OSError:
-                pass
             return False
+        finally:
+            for temporary_file in (temporary, backup_temporary):
+                try:
+                    temporary_file.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+    @staticmethod
+    def _read_state(state_file):
+        with state_file.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+        if not isinstance(data, dict) or not isinstance(data.get("quizzes"), list):
+            raise ValueError("quizzes 항목이 올바르지 않습니다.")
+        quizzes = [Quiz.from_dict(item) for item in data["quizzes"]]
+        score = data.get("best_score")
+        total = data.get("best_total")
+        if score is not None and (type(score) is not int or score < 0):
+            raise ValueError("best_score 값이 올바르지 않습니다.")
+        if total is not None and (type(total) is not int or total < 0):
+            raise ValueError("best_total 값이 올바르지 않습니다.")
+        if (score is None) != (total is None):
+            raise ValueError("최고 점수 기록이 불완전합니다.")
+        if score is not None and (total == 0 or score > total):
+            raise ValueError("최고 점수가 전체 문제 수보다 큽니다.")
+        return quizzes, score, total
+
+    @staticmethod
+    def _is_valid_state_file(state_file):
+        try:
+            QuizGame._read_state(state_file)
+            return True
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError, KeyError, TypeError):
+            return False
+
+    def _apply_state(self, state):
+        self.quizzes, self.best_score, self.best_total = state
 
     def load(self):
         try:
-            with self.state_file.open("r", encoding="utf-8") as file:
-                data = json.load(file)
-            if not isinstance(data, dict) or not isinstance(data.get("quizzes"), list):
-                raise ValueError("quizzes 항목이 올바르지 않습니다.")
-            quizzes = [Quiz.from_dict(item) for item in data["quizzes"]]
-            score = data.get("best_score")
-            total = data.get("best_total")
-            if score is not None and (type(score) is not int or score < 0):
-                raise ValueError("best_score 값이 올바르지 않습니다.")
-            if total is not None and (type(total) is not int or total < 0):
-                raise ValueError("best_total 값이 올바르지 않습니다.")
-            if (score is None) != (total is None):
-                raise ValueError("최고 점수 기록이 불완전합니다.")
-            if score is not None and (total == 0 or score > total):
-                raise ValueError("최고 점수가 전체 문제 수보다 큽니다.")
-            self.quizzes = quizzes
-            self.best_score = score
-            self.best_total = total
-        except FileNotFoundError:
-            print("[안내] 저장 파일이 없어 기본 퀴즈로 시작합니다.")
-            self.save()
+            self._apply_state(self._read_state(self.state_file))
+            return
         except (OSError, UnicodeError, json.JSONDecodeError, ValueError, KeyError, TypeError) as error:
-            print(f"[안내] 데이터 파일을 읽을 수 없거나 손상되었습니다: {error}")
+            if isinstance(error, FileNotFoundError):
+                print("[안내] 저장 파일이 없어 기본 퀴즈로 시작합니다.")
+            else:
+                print(f"[안내] 데이터 파일을 읽을 수 없거나 손상되었습니다: {error}")
+                print("[안내] 백업 파일에서 복원을 시도합니다.")
+
+        backup_file = self.state_file.with_name(self.state_file.name + ".bak")
+        try:
+            backup_state = self._read_state(backup_file)
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError, KeyError, TypeError) as error:
+            if isinstance(error, FileNotFoundError):
+                print("[안내] 사용 가능한 .bak 백업이 없습니다.")
+            else:
+                print(f"[안내] .bak 백업을 읽을 수 없습니다: {error}")
             print("[안내] 기본 퀴즈 데이터로 초기화합니다.")
             self.quizzes = default_quizzes()
             self.best_score = None
             self.best_total = None
+            self.save()
+        else:
+            self._apply_state(backup_state)
+            print("[안내] .bak 백업에서 데이터를 복원했습니다.")
             self.save()
 
     @staticmethod
@@ -227,4 +277,3 @@ class QuizGame:
 
 if __name__ == "__main__":
     QuizGame().run()
-
