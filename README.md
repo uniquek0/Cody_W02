@@ -95,4 +95,26 @@ quiz-project/
 
 ## Git 실습
 
-저장소 생성, 초기 커밋·푸시, 기능별 커밋, 별도 브랜치 작업과 `main` 병합, 저장소 `clone` 및 `pull` 실습은 개발자가 직접 수행합니다. 이 프로그램은 Git 명령을 자동으로 실행하지 않습니다.
+### 커밋 및 원격 저장소에 푸시
+
+`master` 브랜치에서 변경사항을 커밋한 뒤 원격 저장소로 푸시했습니다.
+
+```bash
+git add quiz_game.py
+git commit -m "11102236"
+git push origin master
+```
+
+처음 `git push`를 실행했을 때는 upstream 브랜치가 설정되지 않아 실패했습니다. `git push origin main`도 로컬에 `main` 브랜치가 없어 실패했으며, 현재 브랜치 이름에 맞춘 `git push origin master`로 푸시했습니다.
+
+![master 브랜치 커밋 및 푸시 기록](git_pull_push.png)
+
+### Pull request로 `main`에 병합
+
+GitHub에서 `master`의 커밋을 `main`에 병합하는 Pull request를 생성했습니다. 변경사항은 충돌 없이 자동 병합 가능한 상태였고, Pull request를 병합한 뒤 `main` 브랜치에 병합 커밋이 생성되었습니다.
+
+![master에서 main으로 Pull request 생성](git_merge0.png)
+
+![Pull request 병합 후 main 브랜치](git_merge1.png)
+
+이 실습에서 병합 방향은 **`master`에서 `main`으로**입니다. 이 프로그램 자체가 Git 명령을 자동으로 실행하지는 않습니다.
